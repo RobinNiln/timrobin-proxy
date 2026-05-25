@@ -1,11 +1,8 @@
 const https = require('https');
-
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.ANTHROPIC_API_KEY;
-const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || '';
 
 require('http').createServer((req, res) => {
-
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Access-Password');
@@ -28,16 +25,9 @@ require('http').createServer((req, res) => {
     return;
   }
 
-  if (ACCESS_PASSWORD && req.headers['x-access-password'] !== ACCESS_PASSWORD) {
-    res.writeHead(401, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Unauthorized' }));
-    return;
-  }
-
   let body = '';
   req.on('data', chunk => body += chunk);
   req.on('end', () => {
-
     let parsed;
     try { parsed = JSON.parse(body); }
     catch {
@@ -83,5 +73,4 @@ require('http').createServer((req, res) => {
     proxyReq.write(payload);
     proxyReq.end();
   });
-
 }).listen(PORT, () => console.log(`Proxy running on port ${PORT}`));
