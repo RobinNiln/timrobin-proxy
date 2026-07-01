@@ -21,7 +21,7 @@ function callAnthropic(messages, model, res) {
     return;
   }
 
-  const payload = JSON.stringify({ model, max_tokens: 4000, messages });
+  const payload = JSON.stringify({ model, max_tokens: 8000, messages });
 
   const options = {
     hostname: 'api.anthropic.com',
@@ -60,7 +60,7 @@ function callOpenAI(messages, model, res) {
     return;
   }
 
-  const payload = JSON.stringify({ model, max_tokens: 4000, messages });
+  const payload = JSON.stringify({ model, max_tokens: 8000, messages });
 
   const options = {
     hostname: 'api.openai.com',
