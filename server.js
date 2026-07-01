@@ -2,6 +2,7 @@ const https = require('https');
 const PORT = process.env.PORT || 3000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
+const ACCESS_PASSWORD   = process.env.ACCESS_PASSWORD || 'timrobin2024';
 
 // Model routing per tool
 const TOOL_MODELS = {
@@ -21,7 +22,7 @@ function callAnthropic(messages, model, res) {
     return;
   }
 
-  const payload = JSON.stringify({ model, max_tokens: 2000, messages });
+  const payload = JSON.stringify({ model, max_tokens: 4000, messages });
 
   const options = {
     hostname: 'api.anthropic.com',
@@ -35,7 +36,7 @@ function callAnthropic(messages, model, res) {
     }
   };
 
-  const req = https.request(options, proxyRes => {
+  const apiReq = https.request(options, proxyRes => {
     let data = '';
     proxyRes.on('data', chunk => data += chunk);
     proxyRes.on('end', () => {
@@ -44,13 +45,13 @@ function callAnthropic(messages, model, res) {
     });
   });
 
-  req.on('error', err => {
+  apiReq.on('error', err => {
     if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Upstream error', detail: err.message }));
   });
 
-  req.write(payload);
-  req.end();
+  apiReq.write(payload);
+  apiReq.end();
 }
 
 function callOpenAI(messages, model, res) {
@@ -60,7 +61,7 @@ function callOpenAI(messages, model, res) {
     return;
   }
 
-  const payload = JSON.stringify({ model, max_tokens: 2000, messages });
+  const payload = JSON.stringify({ model, max_tokens: 4000, messages });
 
   const options = {
     hostname: 'api.openai.com',
@@ -73,7 +74,7 @@ function callOpenAI(messages, model, res) {
     }
   };
 
-  const req = https.request(options, proxyRes => {
+  const apiReq = https.request(options, proxyRes => {
     let data = '';
     proxyRes.on('data', chunk => data += chunk);
     proxyRes.on('end', () => {
@@ -96,19 +97,19 @@ function callOpenAI(messages, model, res) {
     });
   });
 
-  req.on('error', err => {
+  apiReq.on('error', err => {
     if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Upstream error', detail: err.message }));
   });
 
-  req.write(payload);
-  req.end();
+  apiReq.write(payload);
+  apiReq.end();
 }
 
 require('http').createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Tool-Id');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Tool-Id, X-Access-Password');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -130,6 +131,14 @@ require('http').createServer((req, res) => {
     catch {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      return;
+    }
+
+    // Password check (accepts header or body field)
+    const provided = req.headers['x-access-password'] || parsed.password || '';
+    if (ACCESS_PASSWORD && provided !== ACCESS_PASSWORD) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
       return;
     }
 
