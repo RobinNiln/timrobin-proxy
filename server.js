@@ -2,7 +2,6 @@ const https = require('https');
 const PORT = process.env.PORT || 3000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
-const ACCESS_PASSWORD   = process.env.ACCESS_PASSWORD || 'timrobin2024';
 
 // Model routing per tool
 const TOOL_MODELS = {
@@ -134,12 +133,15 @@ require('http').createServer((req, res) => {
       return;
     }
 
-    // Password check (accepts header or body field)
-    const provided = req.headers['x-access-password'] || parsed.password || '';
-    if (ACCESS_PASSWORD && provided !== ACCESS_PASSWORD) {
-      res.writeHead(401, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Unauthorized' }));
-      return;
+    // Optional password check: only enforced if ACCESS_PASSWORD env var is set.
+    // If no env var is configured, all requests pass (matches original behaviour).
+    if (process.env.ACCESS_PASSWORD) {
+      const provided = req.headers['x-access-password'] || parsed.password || '';
+      if (provided !== process.env.ACCESS_PASSWORD) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized' }));
+        return;
+      }
     }
 
     const toolId  = req.headers['x-tool-id'] || parsed.tool_id || '';
