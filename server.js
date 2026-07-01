@@ -5,14 +5,14 @@ const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
 
 // Model routing per tool
 const TOOL_MODELS = {
-  'market-pulse': { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+  'market-pulse': { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   'the-brief':    { provider: 'openai',    model: 'gpt-4o' },
-  'newsroom':     { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
-  'native':       { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+  'newsroom':     { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+  'native':       { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   'ad-copy':      { provider: 'openai',    model: 'gpt-4o' },
 };
 
-const DEFAULT_MODEL = { provider: 'anthropic', model: 'claude-sonnet-4-20250514' };
+const DEFAULT_MODEL = { provider: 'anthropic', model: 'claude-sonnet-4-6' };
 
 function callAnthropic(messages, model, res) {
   if (!ANTHROPIC_API_KEY) {
