@@ -1388,6 +1388,33 @@ body.brief-mode{background:#FBFAF7}
         <label style="display:block;font-size:13px;font-weight:600;color:#2C2520;margin-bottom:6px">Om företaget</label>
         <textarea id="brand-description" style="width:100%;min-height:90px;padding:11px 14px;border:1px solid #e0dcd3;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;resize:vertical" placeholder="Kort beskrivning av vad ni gör, era värderingar och vad som gör er unika."></textarea>
       </div>
+
+      <div style="border-top:1px solid #f0eee8;padding-top:1.5rem;margin-bottom:0.5rem">
+        <div style="font-size:13px;font-weight:700;color:#2C2520;margin-bottom:4px">Målgrupp & budskap</div>
+        <p style="font-size:12px;color:#8a7d6d;margin:0 0 14px;line-height:1.5">Det här fylls i automatiskt i verktygen och styr hur AI:n skriver – så ni slipper upprepa det varje gång.</p>
+      </div>
+      <div style="margin-bottom:1.25rem">
+        <label style="display:block;font-size:13px;font-weight:600;color:#2C2520;margin-bottom:6px">Er vanligaste målgrupp</label>
+        <input id="brand-audience" type="text" style="width:100%;padding:11px 14px;border:1px solid #e0dcd3;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box" placeholder="Ex. Villaägare 40–65 år i Mälardalen">
+      </div>
+      <div style="margin-bottom:1.25rem">
+        <label style="display:block;font-size:13px;font-weight:600;color:#2C2520;margin-bottom:6px">Produkter / tjänster ni säljer</label>
+        <textarea id="brand-products" style="width:100%;min-height:70px;padding:11px 14px;border:1px solid #e0dcd3;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;resize:vertical" placeholder="Ex. Kvalitetskontrollerade begagnade elbilar, verkstadstjänster, batterikontroll"></textarea>
+      </div>
+      <div style="margin-bottom:1.25rem">
+        <label style="display:block;font-size:13px;font-weight:600;color:#2C2520;margin-bottom:6px">Nyckelbudskap / det ni alltid vill få fram</label>
+        <textarea id="brand-messages" style="width:100%;min-height:70px;padding:11px 14px;border:1px solid #e0dcd3;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;resize:vertical" placeholder="Ex. Trygghet vid begagnatköp, 12 månaders garanti, lokal och personlig service"></textarea>
+      </div>
+      <div style="margin-bottom:1.25rem">
+        <label style="display:block;font-size:13px;font-weight:600;color:#2C2520;margin-bottom:6px">Geografiskt område</label>
+        <input id="brand-geo" type="text" style="width:100%;padding:11px 14px;border:1px solid #e0dcd3;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box" placeholder="Ex. Västerås och Mälardalen">
+      </div>
+      <div style="margin-bottom:1.75rem">
+        <label style="display:block;font-size:13px;font-weight:600;color:#2C2520;margin-bottom:6px">Undvik / förbjudna ord</label>
+        <input id="brand-avoid" type="text" style="width:100%;padding:11px 14px;border:1px solid #e0dcd3;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box" placeholder="Ex. billig, fantastisk, utropstecken">
+        <div style="font-size:12px;color:#8a7d6d;margin-top:6px;line-height:1.5">Ord eller uttryck AI:n aldrig ska använda i era texter.</div>
+      </div>
+
       <div style="margin-bottom:1.75rem">
         <label style="display:block;font-size:13px;font-weight:600;color:#2C2520;margin-bottom:6px">Önskad ton</label>
         <input id="brand-tone" type="text" style="width:100%;padding:11px 14px;border:1px solid #e0dcd3;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box" placeholder="Ex. Professionell och förtroendegivande">
@@ -2860,7 +2887,7 @@ async function analyzeMarketing(){
   document.getElementById('form-section').style.display='none';
   document.getElementById('loading-state').style.display='block';
   try{
-    const data = await safeFetch([{role:'user',content:buildPrompt()}], 80000, 'market-pulse');
+    const data = await safeFetch([{role:'user',content:buildPrompt()+brandGuidance()}], 80000, 'market-pulse');
     const raw=data.content.map(i=>i.text||'').join('');
     const cleaned=raw.replace(/```json|```/g,'').trim();
     const result=JSON.parse(cleaned);
@@ -3285,7 +3312,7 @@ Call to action: ${cta}
 Total kampanjbudget: ${budget.toLocaleString('sv-SE')} kr`;
 
   try {
-    const data = await safeFetch([{role:'user',content:systemPrompt+'\n\n'+userPrompt}], 80000, 'native');
+    const data = await safeFetch([{role:'user',content:systemPrompt+'\n\n'+userPrompt+brandGuidance()}], 80000, 'native');
     const raw = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
     const clean = raw.replace(/```json|```/g,'').trim();
     const article = JSON.parse(clean);
@@ -3772,6 +3799,11 @@ async function goToBrandProfile() {
   document.getElementById('brand-website').value       = (p && p.website) || '';
   document.getElementById('brand-contact-email').value = (p && p.contact_email) || '';
   document.getElementById('brand-contact-phone').value = (p && p.contact_phone) || '';
+  document.getElementById('brand-audience').value = (p && p.default_audience) || '';
+  document.getElementById('brand-products').value = (p && p.products_services) || '';
+  document.getElementById('brand-messages').value = (p && p.key_messages) || '';
+  document.getElementById('brand-geo').value = (p && p.geo_area) || '';
+  document.getElementById('brand-avoid').value = (p && p.avoid_words) || '';
   // key_people kommer som en lista (array). Rita en rad per person.
   const people = (p && Array.isArray(p.key_people)) ? p.key_people : [];
   renderBrandPeople(people);
@@ -3918,6 +3950,11 @@ async function saveBrandProfile() {
     website: document.getElementById('brand-website').value.trim(),
     contact_email: document.getElementById('brand-contact-email').value.trim(),
     contact_phone: document.getElementById('brand-contact-phone').value.trim(),
+    default_audience: document.getElementById('brand-audience').value.trim(),
+    products_services: document.getElementById('brand-products').value.trim(),
+    key_messages: document.getElementById('brand-messages').value.trim(),
+    geo_area: document.getElementById('brand-geo').value.trim(),
+    avoid_words: document.getElementById('brand-avoid').value.trim(),
     key_people: collectBrandPeople(),
     ad_style: _brandAdStyle,
     ad_color: document.getElementById('brand-color').value,
@@ -3952,6 +3989,23 @@ function fillIfEmpty(id, value) {
   if (el && !el.value && value) el.value = value;
 }
 
+/* Bygger ett litet instruktionsblock från varumärkesprofilen som kan klistras
+   in i vilken AI-prompt som helst. Detta är "prompt-injektion": informationen
+   når AI:n även om det inte finns något synligt formulärfält för den.
+   Returnerar tom sträng om profilen saknas eller är tom – då påverkas inget. */
+function brandGuidance() {
+  const p = _brandProfile;
+  if (!p) return '';
+  const lines = [];
+  if (p.tone)              lines.push('- Ton och röst: ' + p.tone);
+  if (p.key_messages)      lines.push('- Nyckelbudskap som helst ska genomsyra texten: ' + p.key_messages);
+  if (p.products_services) lines.push('- Produkter/tjänster företaget erbjuder: ' + p.products_services);
+  if (p.geo_area)          lines.push('- Geografiskt område företaget verkar i: ' + p.geo_area);
+  if (p.avoid_words)       lines.push('- FÖRBJUDNA ord och uttryck – använd ALDRIG dessa: ' + p.avoid_words);
+  if (lines.length === 0) return '';
+  return '\n\nVARUMÄRKESRIKTLINJER (följ dessa noga):\n' + lines.join('\n');
+}
+
 // Auto-fyller The Briefs formulär från den sparade profilen.
 async function applyBrandProfileToBrief() {
   if (!_currentUser) return;
@@ -3960,6 +4014,15 @@ async function applyBrandProfileToBrief() {
   fillIfEmpty('br-company', p.company);
   fillIfEmpty('br-industry', p.industry);
   fillIfEmpty('br-tone', p.tone);
+  fillIfEmpty('br-audience', p.default_audience);
+  fillIfEmpty('br-region', p.geo_area);
+  // Budskapsfältet: föreslå produkter + nyckelbudskap som utgångspunkt.
+  if (p.key_messages || p.products_services) {
+    const parts = [];
+    if (p.products_services) parts.push(p.products_services);
+    if (p.key_messages) parts.push(p.key_messages);
+    fillIfEmpty('br-message', parts.join('. '));
+  }
 }
 
 async function applyBrandProfileToMarket() {
@@ -3968,6 +4031,9 @@ async function applyBrandProfileToMarket() {
   if (!p) return;
   fillIfEmpty('company', p.company);
   fillIfEmpty('industry', p.industry);
+  fillIfEmpty('description', p.description);
+  fillIfEmpty('audience-extra', p.default_audience);
+  fillIfEmpty('usp', p.key_messages);
 }
 
 async function applyBrandProfileToNative() {
@@ -3977,6 +4043,14 @@ async function applyBrandProfileToNative() {
   fillIfEmpty('n-company', p.company);
   fillIfEmpty('n-industry', p.industry);
   fillIfEmpty('n-website', p.website);
+  fillIfEmpty('n-audience', p.default_audience);
+  // Kampanjfältet: produkter + nyckelbudskap som startpunkt användaren kan finslipa.
+  if (p.products_services || p.key_messages) {
+    const parts = [];
+    if (p.products_services) parts.push(p.products_services);
+    if (p.key_messages) parts.push(p.key_messages);
+    fillIfEmpty('n-campaign', parts.join('. '));
+  }
 }
 
 async function applyBrandProfileToNewsroom() {
@@ -4566,7 +4640,7 @@ Returnera ENBART ett giltigt JSON-objekt med exakt dessa fält och inget annat. 
 }`;
 
   try {
-    const data = await safeFetch([{ role: 'user', content: prompt }], 80000, 'newsroom');
+    const data = await safeFetch([{ role: 'user', content: prompt + brandGuidance() }], 80000, 'newsroom');
     const raw = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
     const clean = raw.replace(/```json|```/g, '').trim();
     const result = JSON.parse(clean);
@@ -4804,7 +4878,7 @@ Returnera ENBART ett giltigt JSON-objekt med exakt dessa fält och inget annat. 
 }`;
 
   try {
-    const data = await safeFetch([{ role: 'user', content: prompt }], 80000, 'the-brief');
+    const data = await safeFetch([{ role: 'user', content: prompt + brandGuidance() }], 80000, 'the-brief');
     const raw  = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
     const clean = raw.replace(/```json|```/g, '').trim();
     const r = JSON.parse(clean);
