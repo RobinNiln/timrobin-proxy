@@ -9,6 +9,7 @@ const TOOL_MODELS = {
   'the-brief':    { provider: 'openai',    model: 'gpt-4o' },
   'newsroom':     { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   'native':       { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+  'dist':         { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   'ad-copy':      { provider: 'openai',    model: 'gpt-4o' },
 };
 
