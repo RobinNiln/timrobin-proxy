@@ -4,13 +4,17 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
 
 // Model routing per tool
+// Detta är den ENDA plats du behöver ändra för att byta modell per verktyg.
+// Vill du senare testa en annan modell för ett verktyg: ändra bara dess rad.
+// (Att lägga till en helt ny leverantör, t.ex. Gemini, kräver också en ny
+//  call-funktion längre ner – se callAnthropic/callOpenAI som mönster.)
 const TOOL_MODELS = {
   'market-pulse': { provider: 'anthropic', model: 'claude-sonnet-4-6' },
-  'the-brief':    { provider: 'openai',    model: 'gpt-4o' },
+  'the-brief':    { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   'newsroom':     { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   'native':       { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   'dist':         { provider: 'anthropic', model: 'claude-sonnet-4-6' },
-  'ad-copy':      { provider: 'openai',    model: 'gpt-4o' },
+  'ad-copy':      { provider: 'anthropic', model: 'claude-sonnet-4-6' },
 };
 
 const DEFAULT_MODEL = { provider: 'anthropic', model: 'claude-sonnet-4-6' };
@@ -148,7 +152,7 @@ require('http').createServer((req, res) => {
     const toolId  = req.headers['x-tool-id'] || parsed.tool_id || '';
     const routing = TOOL_MODELS[toolId] || DEFAULT_MODEL;
 
-    console.log(`Tool: ${toolId || 'default'} → ${routing.provider}/${routing.model}`);
+    console.log(`Tool: ${toolId || 'default'} -> ${routing.provider}/${routing.model}`);
 
     if (routing.provider === 'openai') {
       callOpenAI(parsed.messages, routing.model, res);
