@@ -110,6 +110,137 @@ function callOpenAI(messages, model, res) {
   apiReq.end();
 }
 
+// ── Hämtar rå HTML för en URL via callback (bygger inte HTTP-svar själv) ─────
+// cb(err, { html, finalUrl }). Följer upp till 4 omdirigeringar. Används av
+// både enkel- och multi-sida-hämtningen.
+function fetchRaw(targetUrl, cb, redirectsLeft) {
+  if (redirectsLeft === undefined) redirectsLeft = 4;
+  let parsed;
+  try { parsed = new URL(targetUrl); }
+  catch { return cb(new Error('Ogiltig URL')); }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return cb(new Error('Fel protokoll'));
+  }
+  const lib = parsed.protocol === 'http:' ? require('http') : https;
+  const options = {
+    hostname: parsed.hostname,
+    port: parsed.port || (parsed.protocol === 'http:' ? 80 : 443),
+    path: parsed.pathname + parsed.search,
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; MavaBot/1.0; +https://mava.se)',
+      'Accept': 'text/html,application/xhtml+xml'
+    }
+  };
+  const r = lib.request(options, pr => {
+    if ([301,302,303,307,308].includes(pr.statusCode) && pr.headers.location) {
+      pr.resume();
+      if (redirectsLeft <= 0) return cb(new Error('För många omdirigeringar'));
+      return fetchRaw(new URL(pr.headers.location, parsed).href, cb, redirectsLeft - 1);
+    }
+    if (pr.statusCode >= 400) { pr.resume(); return cb(new Error('HTTP ' + pr.statusCode)); }
+    const ctype = pr.headers['content-type'] || '';
+    if (ctype && ctype.indexOf('html') === -1 && ctype.indexOf('text') === -1) {
+      pr.resume(); return cb(new Error('Inte HTML'));
+    }
+    let html = '', bytes = 0; const MAX = 3 * 1024 * 1024;
+    pr.on('data', c => { bytes += c.length; if (bytes <= MAX) html += c; else pr.destroy(); });
+    pr.on('end', () => cb(null, { html: html, finalUrl: parsed.href }));
+  });
+  r.on('error', err => cb(err));
+  r.setTimeout(15000, () => { r.destroy(new Error('Timeout')); });
+  r.end();
+}
+
+// Plockar ut interna undersidor ur startsidans HTML och prioriterar de mest
+// värdefulla för en AI-synlighetsanalys (om, tjänster, kontakt, priser ...).
+function pickSubpages(html, baseUrl, max) {
+  const base = new URL(baseUrl);
+  const found = {};                       // href -> true (avdubblering)
+  const re = /<a\s[^>]*href\s*=\s*["']([^"'#?]+)[^"']*["'][^>]*>(.*?)<\/a>/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    let href = m[1].trim();
+    const anchorText = m[2].replace(/<[^>]+>/g, ' ').toLowerCase();
+    let u;
+    try { u = new URL(href, base); } catch { continue; }
+    if (u.hostname !== base.hostname) continue;          // bara samma sajt
+    if (!/^https?:$/.test(u.protocol)) continue;
+    const path = u.pathname.replace(/\/$/, '').toLowerCase();
+    if (path === '' || path === '/') continue;           // hoppa startsidan
+    if (/\.(jpg|jpeg|png|gif|svg|webp|pdf|zip|mp4|css|js|ico)$/i.test(path)) continue;
+    // Skippa sidor som sällan tillför AI-analys.
+    if (/(cookie|integritet|privacy|villkor|terms|logga-?ut|logout|login|logga-?in|wp-admin|feed|tag\/|kategori\/|category\/)/i.test(path)) continue;
+    const key = u.origin + u.pathname.replace(/\/$/, '');
+    if (found[key]) continue;
+    // Prioritetspoäng: högre = viktigare för AI-synlighet.
+    let score = 1;
+    const hay = path + ' ' + anchorText;
+    if (/(om-?oss|about|vilka-?vi|foretaget|var-?historia)/i.test(hay)) score = 10;
+    else if (/(tjanst|service|erbjud|vad-?vi-?gor|losningar|solutions)/i.test(hay)) score = 9;
+    else if (/(produkt|sortiment|utbud|product)/i.test(hay)) score = 8;
+    else if (/(pris|prices|pricing|kostnad|paket)/i.test(hay)) score = 7;
+    else if (/(kontakt|contact|hitta-?oss|besok)/i.test(hay)) score = 6;
+    else if (/(fraga|faq|vanliga-?fragor|hjalp)/i.test(hay)) score = 6;
+    else if (/(kund|case|referens|recension|omdome)/i.test(hay)) score = 5;
+    // Grundare sidväg (färre snedstreck) = oftast viktigare.
+    const depth = (u.pathname.match(/\//g) || []).length;
+    score += Math.max(0, 3 - depth);
+    found[key] = { url: u.origin + u.pathname, score: score };
+  }
+  const list = Object.keys(found).map(k => found[k]);
+  list.sort((a, b) => b.score - a.score);
+  return list.slice(0, max).map(x => x.url);
+}
+
+// Hämtar en hel sajt: startsida + upp till (max-1) undersidor, slår ihop texten.
+function fetchSite(startUrl, res, max) {
+  max = max || 6;
+  fetchRaw(startUrl, (err, first) => {
+    if (err) {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Kunde inte hämta startsidan: ' + err.message }));
+      return;
+    }
+    const startText = htmlToText(first.html);
+    const subs = pickSubpages(first.html, first.finalUrl, max - 1);
+    const pages = [{ url: first.finalUrl, text: startText }];
+
+    if (subs.length === 0) {
+      return finishSite(res, pages);
+    }
+    // Hämta undersidorna i följd; hoppa över de som strular.
+    let i = 0;
+    function next() {
+      if (i >= subs.length) return finishSite(res, pages);
+      const su = subs[i++];
+      fetchRaw(su, (e, r) => {
+        if (!e && r) {
+          const t = htmlToText(r.html);
+          if (t && t.length > 40) pages.push({ url: su, text: t });
+        }
+        next();
+      });
+    }
+    next();
+  });
+}
+
+function finishSite(res, pages) {
+  // Slå ihop till en text, märkt per sida, och beskär till en rimlig helhet.
+  let combined = '';
+  const perPage = Math.floor(18000 / pages.length);
+  pages.forEach(p => {
+    combined += '\n\n===== SIDA: ' + p.url + ' =====\n' + p.text.slice(0, perPage);
+  });
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    text: combined.trim().slice(0, 20000),
+    pages: pages.map(p => p.url),
+    url: pages[0] ? pages[0].url : ''
+  }));
+}
+
 // ── Hämta en hemsida och strippa den till läsbar text ───────────────────────
 // Används av AI Radar: användaren anger en URL, vi hämtar sidan här på servern
 // (webbläsare blockeras av CORS för andra domäner, men en server får hämta fritt)
@@ -253,6 +384,32 @@ require('http').createServer((req, res) => {
         }
       }
       fetchPage(pj.url || '', res);
+    });
+    return;
+  }
+
+  // AI Radar djup: hämta startsida + undersidor och slå ihop.
+  if (req.method === 'POST' && req.url === '/api/fetch-site') {
+    let sbody = '';
+    req.on('data', c => sbody += c);
+    req.on('end', () => {
+      let sj;
+      try { sj = JSON.parse(sbody); }
+      catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        return;
+      }
+      if (process.env.ACCESS_PASSWORD) {
+        const provided = req.headers['x-access-password'] || sj.password || '';
+        if (provided !== process.env.ACCESS_PASSWORD) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Unauthorized' }));
+          return;
+        }
+      }
+      const max = Math.min(6, Math.max(1, parseInt(sj.max, 10) || 6));
+      fetchSite(sj.url || '', res, max);
     });
     return;
   }
